@@ -35,9 +35,13 @@ public sealed class GameplayHUDController
         _view.LuckyNumberView.Tick(deltaTime);
     }
 
-    public void SpinLuckyNumber(int luckyNumber)
+    public void SpinLuckyNumber(int luckyNumber, Action onCompleteSpin = null)
     {
-        _view.LuckyNumberView.Spin(luckyNumber, ()=> _view.ThrowButton.gameObject.SetActive(true));
+        _view.LuckyNumberView.Spin(luckyNumber, ()=>
+        {
+            onCompleteSpin?.Invoke();
+            _view.ThrowButton.gameObject.SetActive(true);
+        });
     }
 
     public void Hydrate(GameState gameState)

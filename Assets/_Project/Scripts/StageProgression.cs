@@ -34,6 +34,11 @@ public static class StageProgression
         return stage % STAGES_PER_ACT == 0;
     }
 
+    public static int ActByStage(int stage)
+    {
+        return stage / STAGES_PER_ACT;
+    }
+
     public static bool IsRunComplete(int stage)
     {
         return stage >= TOTAL_STAGES;
