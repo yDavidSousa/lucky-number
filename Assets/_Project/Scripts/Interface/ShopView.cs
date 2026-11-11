@@ -49,12 +49,6 @@ public sealed class ShopController
         _view.LeaveButton.Clicked += HandleLeaveClicked;
     }
 
-    public void Open(GameState state)
-    {
-        SetOffers(state.ShopOffers);
-        Hydrate(state);
-    }
-
     public void LateTick(LuckyCharmDefData[] offers)
     {
         for (int i = 0; i < _entries.Length; i++)
@@ -64,12 +58,13 @@ public sealed class ShopController
                 continue;
             }
 
-            _entries[i].infoView.LateTick(_entries[i].view.isHovered);
+            _entries[i].infoView.SetHover(_entries[i].view.isHovered);
         }
     }
 
-    private void SetOffers(LuckyCharmDefData[] offers)
+    public void SetOffers(GameState state)
     {
+        var offers = state.ShopOffers;
         for (int i = 0; i < offers.Length; i++)
         {
             SelectableObjectView modifierItem = Object.Instantiate(offers[i].viewPrefab, _modifierReferences.slots[i].transform).GetComponent<SelectableObjectView>();
@@ -91,8 +86,11 @@ public sealed class ShopController
                 infoView = modifierInfoView,
                 isAvailable = true
             };
+            _entries[i].infoView.SetHover(false);
             modifierInfoView.gameObject.SetActive(true);
         }
+
+        Hydrate(state);
     }
 
     private void CleatOffers()

@@ -25,8 +25,3 @@ MonoBehaviour:
     CharactersPerSecond: 35
     DisplayDuration: 1
     DelayAfter: 0
-  - Text: '{0}!'
-    DisplayMode: 0
-    CharactersPerSecond: 35
-    DisplayDuration: 1
-    DelayAfter: 0

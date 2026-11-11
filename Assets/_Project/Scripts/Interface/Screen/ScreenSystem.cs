@@ -25,6 +25,8 @@ public sealed class ScreenSystem
 {
     private readonly ScreenData[] _screens;
 
+    public bool IsTransitioning { get; private set; }
+
     public ScreenSystem(ScreenView[] views)
     {
         _screens = new ScreenData[views.Length];
@@ -58,6 +60,7 @@ public sealed class ScreenSystem
         screen.elapsed = 0f;
         screen.phase = ScreenPhase.Opening;
         screen.onHidden = null;
+        IsTransitioning = true;
 
         SetInteraction(ref screen, false);
     }
@@ -80,6 +83,7 @@ public sealed class ScreenSystem
         screen.elapsed = 0f;
         screen.phase = ScreenPhase.Closing;
         screen.onHidden = onComplete;
+        IsTransitioning = true;
 
         SetInteraction(ref screen, false);
     }
@@ -112,6 +116,7 @@ public sealed class ScreenSystem
             screen.phase = opened ? ScreenPhase.Visible : ScreenPhase.Hidden;
 
             view.CanvasGroup.alpha = opened ? 1f : 0f;
+            IsTransitioning = false;
 
             SetInteraction(ref screen, opened);
 

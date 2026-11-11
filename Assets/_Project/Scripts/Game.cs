@@ -45,7 +45,7 @@ public sealed class GameState
     public int BossHealth;
 
     public ContractDefData ActiveContract; // change to id
-    public readonly ContractDefData[] ContractOffers = new ContractDefData[2];  // change to id
+    public ContractDefData[] ContractOffers = new ContractDefData[2];  // change to id
 
     public const int MaxModifiers = 3;
     public ModifierType[] EquippedModifiers = new ModifierType[MaxModifiers];  // change to id
@@ -53,6 +53,33 @@ public sealed class GameState
     public bool[] ShopPurchased = new bool[3];
 
     public DiceResult DiceResult;
+
+    public void Reset()
+    {
+        Phase = GamePhase.None;
+        PendingPhase = null;
+
+        Stage = 0;
+        StageScore = 0;
+        RollsRemaining = 0;
+
+        LuckyNumber = 0;
+        Currency = 0;
+
+        LossStreak = 0;
+
+        StageSettings = default;
+        BossHealth = 0;
+
+        ActiveContract = default;
+        ContractOffers = new ContractDefData[2];
+
+        EquippedModifiers = new ModifierType[MaxModifiers];
+        ShopOffers = new LuckyCharmDefData[3];
+        ShopPurchased = new bool[3];
+
+        DiceResult = new DiceResult();
+    }
 }
 
 public static class Game
@@ -69,6 +96,7 @@ public static class Game
 
     //Systems
     private static ScreenSystem _screenSystem;
+    private static GameFlowSystem _flowSystem;
     private static ShopSystem _shopSystem;
     private static LuckyCharmSystem _luckyCharmSystem;
     private static ContractSystem _contractSystem;
@@ -125,22 +153,21 @@ public static class Game
         yield return null;
 
         _inventorySlots = startupReferences.InventorySlots;
-        _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, () => _state.PendingPhase = GamePhase.Rolling);
+        _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, () => _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Rolling)));
         _shopController = new ShopController(_state, startupReferences.Shop, startupReferences.WorldCamera, startupReferences.ModifierReferences, LeaveShop, BuyModifier);
         _contractController = new ContractController(_state, startupReferences.Contract, startupReferences.ContractReferences, SelectContract);
         _gameOverController = new GameOverController(startupReferences.GameOver, Restart);
         _dialogueController = new DialogueController(_dialogueSystem, startupReferences.Dialogue);
 
-        _screenSystem.Hide(ShopView.Id);
-        _screenSystem.Hide(ContractView.Id);
-        _screenSystem.Hide(GameOverView.Id);
+        _flowSystem = new GameFlowSystem(_screenSystem, _dialogueController, _state, true);
 
         yield return null;
 
-        _screenSystem.Show(GameplayHUDView.Id);
+        _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.FirstEncounter));
+        _flowSystem.Enqueue(FlowAction.Show(GameplayHUDView.Id));
+        _flowSystem.Enqueue(FlowAction.Wait(0.5f));
 
         StartStage();
-        _dialogueController.Trigger(DialogueTrigger.FirstEncounter, DialogueAct.Any);
         _initialized = true;
     }
 
@@ -162,6 +189,18 @@ public static class Game
     private static void Update(float deltaTime)
     {
         if (!_initialized) return;
+        
+        _screenSystem.Tick(deltaTime);
+        {
+            _gameplayHUDController.Tick(deltaTime);
+            _dialogueController.Tick(deltaTime);
+        }
+        _flowSystem.Tick(deltaTime);
+
+        if (_flowSystem.IsBusy)
+        {
+            return;
+        }
 
         switch (_state.Phase)
         {
@@ -188,16 +227,11 @@ public static class Game
                         DieB = _dices[1].GetValue(),
                         BaseScore = 100
                     };
-                    _state.PendingPhase = GamePhase.Result;
+                    _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Result));
                 }
                 break;
             }
         }
-        
-        _screenSystem.Tick(deltaTime);
-
-        _gameplayHUDController.Tick(deltaTime);
-        _dialogueController.Tick(deltaTime);
     }
 
     private static void LateUpdate(float deltaTime)
@@ -240,7 +274,10 @@ public static class Game
         _state.StageSettings = settings;
         _state.RollsRemaining = settings.MaxRolls;
 
-        _state.PendingPhase = GamePhase.Preparation;
+        _gameplayHUDController.Hydrate(_state);
+        _state.LuckyNumber = _generator.Generate(difficulty: 0.5f, lossStreak: _state.LossStreak);
+        _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.LuckyNumberRevealed));
+        _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Preparation));
     }
 
     private static void ChangeStagePhase(GamePhase nextPhase)
@@ -249,15 +286,7 @@ public static class Game
         {
             case GamePhase.Preparation:
             {
-                _state.LuckyNumber = _generator.Generate(
-                    difficulty: 0.5f,
-                    lossStreak: _state.LossStreak
-                );
-                _dialogueController.Trigger(DialogueTrigger.LuckyNumberRevealed, DialogueAct.Act1);
                 _gameplayHUDController.SpinLuckyNumber(_state.LuckyNumber);
-
-                _gameplayHUDController.Hydrate(_state);
-
                 break;
             }
             case GamePhase.Rolling:
@@ -271,11 +300,12 @@ public static class Game
             {
                 int finalScore = EvaluateResult();
                 CompleteRoll(finalScore);
+                _gameplayHUDController.Hydrate(_state);
                 break;
             }
             case GamePhase.Shop:
             {
-                _screenSystem.Hide(GameplayHUDView.Id);
+                _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.ShopOpened));
 
                 for (int i = 0; i < _dices.Length; i++)
                 {
@@ -283,14 +313,12 @@ public static class Game
                     dice.gameObject.SetActive(false);
                 }
 
-                _dialogueController.Trigger(DialogueTrigger.ShopOpened, GetDialogueAct(_state.Stage, _state.Phase == GamePhase.Boss));
-                _shopController.Open(_state);
-                _screenSystem.Show(ShopView.Id);
+                _shopController.SetOffers(_state);
                 break;
             }
             case GamePhase.ContractSelection:
             {
-                _screenSystem.Hide(GameplayHUDView.Id);
+                _flowSystem.Enqueue(FlowAction.Hide(GameplayHUDView.Id));
 
                 for (int i = 0; i < _dices.Length; i++)
                 {
@@ -299,14 +327,13 @@ public static class Game
                 }
 
                 _contractController.SetContracts(_state.ContractOffers);
-                _screenSystem.Show(ContractView.Id);
+                _flowSystem.Enqueue(FlowAction.Show(ContractView.Id));
                 break;
             }
             case GamePhase.GameOver:
             {
-                _screenSystem.Hide(GameplayHUDView.Id);
-
-                _screenSystem.Show(GameOverView.Id);
+                _flowSystem.Enqueue(FlowAction.Hide(GameplayHUDView.Id));
+                _flowSystem.Enqueue(FlowAction.Show(GameOverView.Id));
                 break;
             }
         }
@@ -326,11 +353,13 @@ public static class Game
         }
         else if (_state.RollsRemaining <= 0)
         {
-            _state.PendingPhase = GamePhase.GameOver;
+            _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.GameOver));
         }
         else
         {
-            _state.PendingPhase = GamePhase.Preparation;
+            _state.LuckyNumber = _generator.Generate(difficulty: 0.5f, lossStreak: _state.LossStreak);
+            _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.LuckyNumberRevealed));
+            _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Preparation));
         }
     }
 
@@ -349,35 +378,36 @@ public static class Game
 
         _shopSystem.GenerateOffers(_state.ShopOffers, ref _state.ShopPurchased);
 
-        _state.PendingPhase = GamePhase.Shop;
+        _flowSystem.Enqueue(FlowAction.Wait(0.5f));
+        _flowSystem.Enqueue(FlowAction.Hide(GameplayHUDView.Id));
+        _flowSystem.Enqueue(FlowAction.Show(ShopView.Id));
+        _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Shop));
     }
 
     private static void LeaveShop()
     {
-        _screenSystem.Hide(ShopView.Id, () =>
+        _flowSystem.Enqueue(FlowAction.Hide(ShopView.Id));
+        _flowSystem.Enqueue(FlowAction.Show(GameplayHUDView.Id));
+
+        if (StageProgression.IsRunComplete(_state.Stage))
         {
-            _screenSystem.Show(GameplayHUDView.Id);
+            _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Boss));
+            return;
+        }
 
-            if (StageProgression.IsRunComplete(_state.Stage))
-            {
-                _state.PendingPhase = GamePhase.Boss;
-                return;
-            }
+        bool actComplete = StageProgression.IsActComplete(_state.Stage);
+        _state.Stage++;
 
-            bool actComplete = StageProgression.IsActComplete(_state.Stage);
-            _state.Stage++;
+        if (actComplete)
+        {
+            _state.ActiveContract = default;
+            _contractSystem.GenerateOffers(_state.ContractOffers);
 
-            if (actComplete)
-            {
-                _state.ActiveContract = default;
-                _contractSystem.GenerateOffers(_state.ContractOffers);
-
-                _state.PendingPhase = GamePhase.ContractSelection;
-                return;
-            }
+            _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.ContractSelection));
+            return;
+        }
             
-            StartStage();
-        });
+        StartStage();
     }
 
     private static void BuyModifier(int offerIndex)
@@ -407,11 +437,9 @@ public static class Game
 
         _state.ActiveContract = _state.ContractOffers[index];
 
-        _screenSystem.Hide(ContractView.Id, () =>
-        {
-            _screenSystem.Show(GameplayHUDView.Id);
-            StartStage();
-        });
+        _flowSystem.Enqueue(FlowAction.Hide(ContractView.Id));
+        _flowSystem.Enqueue(FlowAction.Show(GameplayHUDView.Id));
+        StartStage();
     }
 
     private static void RollDices()
@@ -482,7 +510,7 @@ public static class Game
         };
 
         DialogueAct act = GetDialogueAct(_state.Stage, _state.Phase == GamePhase.Boss);
-        _dialogueController.Trigger(trigger, act);
+        _flowSystem.Enqueue(FlowAction.Speak(trigger));
 
         Debug.Log(
             $"Lucky: {_state.LuckyNumber} | " +
@@ -495,7 +523,11 @@ public static class Game
 
     private static void Restart()
     {
-        _state = new GameState {Phase = GamePhase.GameOver, Stage = 1};
+        _flowSystem.Clear();
+
+        _state.Reset();
+        _state.Phase = GamePhase.GameOver;
+        _state.Stage = 1;
         _generator = new LuckyNumberGenerator();
 
         for (int i = 0; i < _dices.Length; i++)
@@ -513,11 +545,9 @@ public static class Game
             }
         }
 
-        _screenSystem.Hide(GameOverView.Id, () =>
-        {
-            _screenSystem.Show(GameplayHUDView.Id);
-            StartStage();
-        });
+        _flowSystem.Enqueue(FlowAction.Hide(GameOverView.Id));
+        _flowSystem.Enqueue(FlowAction.Show(GameplayHUDView.Id));
+        StartStage();
     }
 
     public static DialogueAct GetDialogueAct(int stage, bool isBoss)

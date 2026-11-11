@@ -22,7 +22,7 @@ public class LuckyCharmInfoView : MonoBehaviour
         SoldOutText.gameObject.SetActive(isPurchased);
     }
 
-    public void LateTick(bool enable)
+    public void SetHover(bool enable)
     {
         NameText.gameObject.SetActive(enable);
         DescriptionText.gameObject.SetActive(enable);
