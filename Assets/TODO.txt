@@ -1,0 +1,11 @@
+LUCKY CHARM
+- Sell LuckyCharm
+- Error Effect 
+- Inspect LuckyCharm (Equipped)
+
+- Refactor SelectableObject
+- HUD polish
+- Coins appear & disappear as reflection amount
+- Refactor dice to be deterministc
+- Maneki Neko interactions
+- Sound Effects and Music

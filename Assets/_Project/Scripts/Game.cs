@@ -44,12 +44,12 @@ public sealed class GameState
     public StageSettings StageSettings;
     public int BossHealth;
 
-    public ContractData ActiveContract;
-    public readonly ContractData[] ContractOffers = new ContractData[2];
+    public ContractDefData ActiveContract; // change to id
+    public readonly ContractDefData[] ContractOffers = new ContractDefData[2];  // change to id
 
     public const int MaxModifiers = 3;
-    public ModifierType[] EquippedModifiers = new ModifierType[MaxModifiers];
-    public ModifierData[] ShopOffers = new ModifierData[3];
+    public ModifierType[] EquippedModifiers = new ModifierType[MaxModifiers];  // change to id
+    public LuckyCharmDefData[] ShopOffers = new LuckyCharmDefData[3];  // change to id
     public bool[] ShopPurchased = new bool[3];
 
     public DiceResult DiceResult;
@@ -65,17 +65,25 @@ public static class Game
     private static Dice[] _dices;
     private static DiceSettings _diceSettings;
     private static int _physicsStepsSinceRoll;
+    private static Transform[] _inventorySlots;
+
+    //Systems
+    private static ScreenSystem _screenSystem;
+    private static ShopSystem _shopSystem;
+    private static LuckyCharmSystem _luckyCharmSystem;
+    private static ContractSystem _contractSystem;
 
     // User Interface (UI)
     private static GameplayHUDController _gameplayHUDController;
     private static ShopController _shopController;
+    private static ContractController _contractController;
     private static GameOverController _gameOverController;
 
     private static IEnumerator Initialize()
     {
         // Game Data
         GameData.Initialize();
-        _state = new GameState();
+        _state = new GameState {Stage = 1};
         _generator = new LuckyNumberGenerator();
 
         StartupSceneReferences startupReferences = Object.FindAnyObjectByType<StartupSceneReferences>();
@@ -99,18 +107,43 @@ public static class Game
             _dices[i] = dice;
         }
 
-        yield return null;
-        _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, _state);
-        _shopController = new ShopController(startupReferences.Shop);
-        _gameOverController = new GameOverController(startupReferences.GameOver);
+        _shopSystem = new ShopSystem(GameData.LuckyCharmDefRegistry);
+        _contractSystem = new ContractSystem(GameData.ContractDefRegistry);
+        _luckyCharmSystem = new LuckyCharmSystem();
 
-        _state.Stage = 1;
+        yield return null;
+
+        ScreenView[] screens = new ScreenView[(int)ScreenId.Count];
+        {
+            screens[(int)ScreenId.HUD] = startupReferences.GameplayHUD.Screen;
+            screens[(int)ScreenId.GameOver] = startupReferences.GameOver.Screen;
+            screens[(int)ScreenId.Shop] = startupReferences.Shop.Screen;
+            screens[(int)ScreenId.Contracts] = startupReferences.Contract.Screen;   
+        }
+        _screenSystem = new ScreenSystem(screens);
+
+        _inventorySlots = startupReferences.InventorySlots;
+        _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, () => _state.PendingPhase = GamePhase.Rolling);
+        _shopController = new ShopController(_state, startupReferences.Shop, startupReferences.WorldCamera, startupReferences.ModifierReferences, LeaveShop, BuyModifier);
+        _contractController = new ContractController(_state, startupReferences.Contract, startupReferences.ContractReferences, SelectContract);
+        _gameOverController = new GameOverController(startupReferences.GameOver, Restart);
+
+        _screenSystem.Hide(ShopView.Id);
+        _screenSystem.Hide(ContractView.Id);
+        _screenSystem.Hide(GameOverView.Id);
+
+        yield return null;
+
+        _screenSystem.Show(GameplayHUDView.Id);
+
         StartStage();
         _initialized = true;
     }
 
     private static void Shutdown()
     {
+        GameData.Dispose();
+
         _initialized = false;
     }
 
@@ -156,6 +189,10 @@ public static class Game
                 break;
             }
         }
+        
+        _screenSystem.Tick(deltaTime);
+
+        _gameplayHUDController.Tick(deltaTime);
     }
 
     private static void LateUpdate(float deltaTime)
@@ -164,7 +201,7 @@ public static class Game
 
         // User Interface (UI)
         {
-            _gameplayHUDController.LateTick();
+            _shopController.LateTick(_state.ShopOffers);
         }
 
         CameraController.LateTick(_cameraController, Vector3.zero, Vector2.zero);
@@ -189,7 +226,7 @@ public static class Game
         int targetScore = settings.TargetScore;
         int maxRolls = settings.MaxRolls;
 
-        ContractSystem.ApplyStageRules(_state.ActiveContract, ref targetScore, ref maxRolls);
+        _contractSystem.ApplyStageRules(_state.ActiveContract, ref targetScore, ref maxRolls);
 
         settings.TargetScore = targetScore;
         settings.MaxRolls = maxRolls;
@@ -211,6 +248,7 @@ public static class Game
                     difficulty: 0.5f,
                     lossStreak: _state.LossStreak
                 );
+                _gameplayHUDController.SpinLuckyNumber(_state.LuckyNumber);
 
                 _gameplayHUDController.Hydrate(_state);
 
@@ -218,33 +256,50 @@ public static class Game
             }
             case GamePhase.Rolling:
             {
+                _state.RollsRemaining--;
                 RollDices();
+                _gameplayHUDController.Hydrate(_state);
                 break;
             }
             case GamePhase.Result:
             {
                 int finalScore = EvaluateResult();
-
                 CompleteRoll(finalScore);
-
-                _gameplayHUDController.Hydrate(_state);
-
                 break;
             }
             case GamePhase.Shop:
             {
-                _shopController.Hydrate(_state, LeaveShop, BuyModifier);
+                _screenSystem.Hide(GameplayHUDView.Id);
+
+                for (int i = 0; i < _dices.Length; i++)
+                {
+                    Dice dice = _dices[i];
+                    dice.gameObject.SetActive(false);
+                }
+
+                _shopController.Open(_state);
+                _screenSystem.Show(ShopView.Id);
                 break;
             }
             case GamePhase.ContractSelection:
             {
-                int contractIndex = Random.Range(0, _state.ContractOffers.Length);
-                SelectContract(contractIndex);
+                _screenSystem.Hide(GameplayHUDView.Id);
+
+                for (int i = 0; i < _dices.Length; i++)
+                {
+                    Dice dice = _dices[i];
+                    dice.gameObject.SetActive(false);
+                }
+
+                _contractController.SetContracts(_state.ContractOffers);
+                _screenSystem.Show(ContractView.Id);
                 break;
             }
             case GamePhase.GameOver:
             {
-                _gameOverController.Hydrate();
+                _screenSystem.Hide(GameplayHUDView.Id);
+
+                _screenSystem.Show(GameOverView.Id);
                 break;
             }
         }
@@ -254,10 +309,9 @@ public static class Game
 
     private static void CompleteRoll(int score)
     {
-        score = ContractSystem.ApplyScorePenalty(_state.ActiveContract, score);
+        score = _contractSystem.ApplyScorePenalty(_state.ActiveContract, score);
 
         _state.StageScore = Mathf.Max(0, _state.StageScore + score);
-        _state.RollsRemaining--;
 
         if (_state.StageScore >= _state.StageSettings.TargetScore)
         {
@@ -282,44 +336,53 @@ public static class Game
 
         if (StageProgression.IsActComplete(_state.Stage))
         {
-            _state.Currency += _state.ActiveContract.Reward;
+            _state.Currency += _state.ActiveContract.reward;
             _state.ActiveContract = default;
         }
 
-        ShopSystem.GenerateOffers(_state.ShopOffers, _state.ShopPurchased);
+        _shopSystem.GenerateOffers(_state.ShopOffers, ref _state.ShopPurchased);
 
         _state.PendingPhase = GamePhase.Shop;
     }
 
     private static void LeaveShop()
     {
-        if (StageProgression.IsRunComplete(_state.Stage))
+        _screenSystem.Hide(ShopView.Id, () =>
         {
-            _state.PendingPhase = GamePhase.Boss;
-            return;
-        }
+            _screenSystem.Show(GameplayHUDView.Id);
 
-        bool actComplete = StageProgression.IsActComplete(_state.Stage);
-        _state.Stage++;
+            if (StageProgression.IsRunComplete(_state.Stage))
+            {
+                _state.PendingPhase = GamePhase.Boss;
+                return;
+            }
 
-        if (actComplete)
-        {
-            _state.ActiveContract = default;
-            ContractSystem.GenerateOffers(_state.ContractOffers);
+            bool actComplete = StageProgression.IsActComplete(_state.Stage);
+            _state.Stage++;
 
-            _state.PendingPhase = GamePhase.ContractSelection;
-            return;
-        }
+            if (actComplete)
+            {
+                _state.ActiveContract = default;
+                _contractSystem.GenerateOffers(_state.ContractOffers);
+
+                _state.PendingPhase = GamePhase.ContractSelection;
+                return;
+            }
             
-        StartStage();
+            StartStage();
+        });
     }
 
     private static void BuyModifier(int offerIndex)
     {
-        bool success = ShopSystem.TryBuy(_state, offerIndex);
+        bool success = _shopSystem.TryBuy(_state, offerIndex, out int slot);
         if (success)
         {
             _shopController.Hydrate(_state);
+
+            LuckyCharmDefData luckyCharmData = _state.ShopOffers[offerIndex];
+            GameObject luckyCharmView = Object.Instantiate(luckyCharmData.viewPrefab, _inventorySlots[slot]);
+            luckyCharmView.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
         }
     }
 
@@ -336,7 +399,12 @@ public static class Game
         }
 
         _state.ActiveContract = _state.ContractOffers[index];
-        StartStage();
+
+        _screenSystem.Hide(ContractView.Id, () =>
+        {
+            _screenSystem.Show(GameplayHUDView.Id);
+            StartStage();
+        });
     }
 
     private static void RollDices()
@@ -367,7 +435,7 @@ public static class Game
         int dieA = diceResult.DieA;
         int dieB = diceResult.DieB;
 
-        ModifierSystem.ApplyDiceModifiers(
+        _luckyCharmSystem.ApplyDiceModifiers(
             _state.EquippedModifiers,
             _state.LuckyNumber,
             ref dieA,
@@ -381,7 +449,7 @@ public static class Game
             diceResult.BaseScore
         );
 
-        int finalScore = ModifierSystem.ApplyScoreModifiers(
+        int finalScore = _luckyCharmSystem.ApplyScoreModifiers(
             _state.EquippedModifiers,
             luckyResult.MatchType,
             luckyResult.Score,
@@ -405,6 +473,33 @@ public static class Game
             $"Pontos: {diceResult.FinalScore}"
         );
         return finalScore;
+    }
+
+    private static void Restart()
+    {
+        _state = new GameState {Phase = GamePhase.GameOver, Stage = 1};
+        _generator = new LuckyNumberGenerator();
+
+        for (int i = 0; i < _dices.Length; i++)
+        {
+            Dice dice = _dices[i];
+            dice.gameObject.SetActive(false);
+        }
+
+        for (int i = 0; i < _inventorySlots.Length; i++)
+        {
+            for (int j = 0; j < _inventorySlots[i].childCount; j++)
+            {
+                Transform luckyCharmView = _inventorySlots[i].GetChild(j);
+                Object.Destroy(luckyCharmView.gameObject);
+            }
+        }
+
+        _screenSystem.Hide(GameOverView.Id, () =>
+        {
+            _screenSystem.Show(GameplayHUDView.Id);
+            StartStage();
+        });
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]

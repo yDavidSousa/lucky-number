@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c5c29b4502d3ef4cacc53908d34cd2b, type: 3}
+  m_Name: CopyBestDie
+  m_EditorClassIdentifier: Assembly-CSharp::LuckyCharmDefAsset
+  _id:
+    _guid: 318ea502c1abb934392f891cd9d5afee
+    _runtimeId: -1164667335
+  _version: 0
+  Type: 2
+  Price: 12
+  Name: Cursed Reflection
+  Effect: Copies one die's value onto the other if it improves your score.
+  Prefab: {fileID: 5204131245147079425, guid: 9c8c3046ab94bcb48a20c645e5525829, type: 3}

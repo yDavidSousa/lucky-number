@@ -1,20 +1,17 @@
 using UnityEngine;
 
-public static class ShopSystem
+public sealed class ShopSystem
 {
-    private static readonly ModifierData[] Pool =
-    {
-        new() { Type = ModifierType.FlipBestDie, Price = 5 },
-        new() { Type = ModifierType.CopyBestDie, Price = 12 },
-        new() { Type = ModifierType.IncreaseLowestDie, Price = 6 },
-        new() { Type = ModifierType.DoubleSumScore, Price = 8 },
-        new() { Type = ModifierType.TripleDoubleScore, Price = 10 },
-        new() { Type = ModifierType.LastRollMultiplier, Price = 9 }
-    };
+    private readonly LuckyCharmDefRegistry _luckyCharmDefRegistry;
 
-    public static void GenerateOffers(ModifierData[] offers, bool[] purchased)
+    public ShopSystem(LuckyCharmDefRegistry luckyCharmDefRegistry)
     {
-        int[] indices = new int[Pool.Length];
+        _luckyCharmDefRegistry = luckyCharmDefRegistry;
+    }
+
+    public void GenerateOffers(LuckyCharmDefData[] offers, ref bool[] purchased)
+    {
+        int[] indices = new int[_luckyCharmDefRegistry.Count];
 
         for (int i = 0; i < indices.Length; i++)
             indices[i] = i;
@@ -25,22 +22,24 @@ public static class ShopSystem
 
             (indices[i], indices[random]) = (indices[random], indices[i]);
 
-            offers[i] = Pool[indices[i]];
+            offers[i] = _luckyCharmDefRegistry.GetByIndex(indices[i]);
             purchased[i] = false;
         }
     }
 
-    public static bool TryBuy(GameState state, int offerIndex)
+    public bool TryBuy(GameState state, int offerIndex, out int slot)
     {
+        slot = -1;
+
         if (offerIndex < 0 || offerIndex >= state.ShopOffers.Length)
             return false;
 
         if (state.ShopPurchased[offerIndex])
             return false;
 
-        ModifierData offer = state.ShopOffers[offerIndex];
+        LuckyCharmDefData offer = state.ShopOffers[offerIndex];
 
-        if (state.Currency < offer.Price)
+        if (state.Currency < offer.price)
             return false;
 
         int freeSlot = -1;
@@ -57,10 +56,11 @@ public static class ShopSystem
         if (freeSlot < 0)
             return false;
 
-        state.Currency -= offer.Price;
-        state.EquippedModifiers[freeSlot] = offer.Type;
+        state.Currency -= offer.price;
+        state.EquippedModifiers[freeSlot] = offer.type;
         state.ShopPurchased[offerIndex] = true;
 
+        slot = freeSlot;
         return true;
     }
 }

@@ -24,24 +24,48 @@ public class DiceSettings
     public Vector2 ThrowTorque;
 }
 
+[System.Serializable]
+public struct ModifierReferences
+{
+    public Transform[] slots;
+}
+
+[System.Serializable]
+public struct ContractReferences
+{
+    public Transform[] slots;
+}
+
+public enum ScreenId : byte
+{
+    HUD,
+    GameOver,
+    Shop,
+    Contracts,
+    Count
+}
+
 [ExecuteInEditMode]
 public class StartupSceneReferences : SceneReferences
 {
-    [Header("Debug")]
-    public SceneCameraSettings CameraSettings;
-
-    [Space]
     public Camera WorldCamera;
 
     [Space]
     public DiceSettings DiceSettings;
-    public Transform[] ModifierSlots;
-    public Transform[] ContractSlots;
 
     [Space]
+    public ModifierReferences ModifierReferences;
+    public ContractReferences ContractReferences;
+    public Transform[] InventorySlots;
+
+    [Header("Interface")]
     public GameplayHUDView GameplayHUD;
     public ShopView Shop;
+    public ContractView Contract;
     public GameOverView GameOver;
+
+    [Header("Debug")]
+    public SceneCameraSettings CameraSettings;
 
 #if UNITY_EDITOR
     private CameraController _camera;
