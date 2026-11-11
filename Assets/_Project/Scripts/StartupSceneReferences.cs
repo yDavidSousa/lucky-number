@@ -63,6 +63,7 @@ public class StartupSceneReferences : SceneReferences
     public ShopView Shop;
     public ContractView Contract;
     public GameOverView GameOver;
+    public DialogueView Dialogue;
 
     [Header("Debug")]
     public SceneCameraSettings CameraSettings;

@@ -1,11 +1,10 @@
-LUCKY CHARM
+PRIORITY
+- Coins appear & disappear as reflection amount
 - Sell LuckyCharm
 - Error Effect 
 - Inspect LuckyCharm (Equipped)
 
-- Refactor SelectableObject
+- Refactor dice to be deterministic
 - HUD polish
-- Coins appear & disappear as reflection amount
-- Refactor dice to be deterministc
-- Maneki Neko interactions
+- Refactor SelectableObject
 - Sound Effects and Music

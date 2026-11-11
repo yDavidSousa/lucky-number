@@ -72,12 +72,14 @@ public static class Game
     private static ShopSystem _shopSystem;
     private static LuckyCharmSystem _luckyCharmSystem;
     private static ContractSystem _contractSystem;
+    private static DialogueSystem _dialogueSystem;
 
     // User Interface (UI)
     private static GameplayHUDController _gameplayHUDController;
     private static ShopController _shopController;
     private static ContractController _contractController;
     private static GameOverController _gameOverController;
+    private static DialogueController _dialogueController;
 
     private static IEnumerator Initialize()
     {
@@ -107,12 +109,6 @@ public static class Game
             _dices[i] = dice;
         }
 
-        _shopSystem = new ShopSystem(GameData.LuckyCharmDefRegistry);
-        _contractSystem = new ContractSystem(GameData.ContractDefRegistry);
-        _luckyCharmSystem = new LuckyCharmSystem();
-
-        yield return null;
-
         ScreenView[] screens = new ScreenView[(int)ScreenId.Count];
         {
             screens[(int)ScreenId.HUD] = startupReferences.GameplayHUD.Screen;
@@ -121,12 +117,19 @@ public static class Game
             screens[(int)ScreenId.Contracts] = startupReferences.Contract.Screen;   
         }
         _screenSystem = new ScreenSystem(screens);
+        _shopSystem = new ShopSystem(GameData.LuckyCharmDefRegistry);
+        _contractSystem = new ContractSystem(GameData.ContractDefRegistry);
+        _luckyCharmSystem = new LuckyCharmSystem();
+        _dialogueSystem = new DialogueSystem(GameData.DialogueDefAssets);
+
+        yield return null;
 
         _inventorySlots = startupReferences.InventorySlots;
         _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, () => _state.PendingPhase = GamePhase.Rolling);
         _shopController = new ShopController(_state, startupReferences.Shop, startupReferences.WorldCamera, startupReferences.ModifierReferences, LeaveShop, BuyModifier);
         _contractController = new ContractController(_state, startupReferences.Contract, startupReferences.ContractReferences, SelectContract);
         _gameOverController = new GameOverController(startupReferences.GameOver, Restart);
+        _dialogueController = new DialogueController(_dialogueSystem, startupReferences.Dialogue);
 
         _screenSystem.Hide(ShopView.Id);
         _screenSystem.Hide(ContractView.Id);
@@ -137,6 +140,7 @@ public static class Game
         _screenSystem.Show(GameplayHUDView.Id);
 
         StartStage();
+        _dialogueController.Trigger(DialogueTrigger.FirstEncounter, DialogueAct.Any);
         _initialized = true;
     }
 
@@ -193,6 +197,7 @@ public static class Game
         _screenSystem.Tick(deltaTime);
 
         _gameplayHUDController.Tick(deltaTime);
+        _dialogueController.Tick(deltaTime);
     }
 
     private static void LateUpdate(float deltaTime)
@@ -248,6 +253,7 @@ public static class Game
                     difficulty: 0.5f,
                     lossStreak: _state.LossStreak
                 );
+                _dialogueController.Trigger(DialogueTrigger.LuckyNumberRevealed, DialogueAct.Act1);
                 _gameplayHUDController.SpinLuckyNumber(_state.LuckyNumber);
 
                 _gameplayHUDController.Hydrate(_state);
@@ -277,6 +283,7 @@ public static class Game
                     dice.gameObject.SetActive(false);
                 }
 
+                _dialogueController.Trigger(DialogueTrigger.ShopOpened, GetDialogueAct(_state.Stage, _state.Phase == GamePhase.Boss));
                 _shopController.Open(_state);
                 _screenSystem.Show(ShopView.Id);
                 break;
@@ -466,6 +473,17 @@ public static class Game
         else
             _state.LossStreak = 0;
 
+        DialogueTrigger trigger = luckyResult.MatchType switch
+        {
+            LuckyMatchType.SingleDie => DialogueTrigger.SingleMatch,
+            LuckyMatchType.Sum => DialogueTrigger.SumMatch,
+            LuckyMatchType.DoubleDice => DialogueTrigger.DoubleMatch,
+            _ => DialogueTrigger.RollMissed
+        };
+
+        DialogueAct act = GetDialogueAct(_state.Stage, _state.Phase == GamePhase.Boss);
+        _dialogueController.Trigger(trigger, act);
+
         Debug.Log(
             $"Lucky: {_state.LuckyNumber} | " +
             $"Dados: {diceResult.DieA}, {diceResult.DieB} | " +
@@ -500,6 +518,21 @@ public static class Game
             _screenSystem.Show(GameplayHUDView.Id);
             StartStage();
         });
+    }
+
+    public static DialogueAct GetDialogueAct(int stage, bool isBoss)
+    {
+        if (isBoss)
+        {
+            return DialogueAct.Boss;   
+        }
+
+        return stage switch
+        {
+            <= StageProgression.STAGES_PER_ACT => DialogueAct.Act1,
+            <= StageProgression.STAGES_PER_ACT * 2 => DialogueAct.Act2,
+            _ => DialogueAct.Act3
+        };
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]

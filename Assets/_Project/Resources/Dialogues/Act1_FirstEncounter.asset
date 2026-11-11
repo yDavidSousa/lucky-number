@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c509a9b3a15fd34d8d494ba129dc512, type: 3}
+  m_Name: Act1_FirstEncounter
+  m_EditorClassIdentifier: Assembly-CSharp::DialogueDefAsset
+  Trigger: 0
+  Act: 0
+  Priority: 1
+  Chance: 1
+  Weight: 1
+  Once: 1
+  Cooldown: 0
+  Lines:
+  - Text: Welcome, welcome!
+    DisplayMode: 1
+    CharactersPerSecond: 35
+    DisplayDuration: 0.5
+    DelayAfter: 0
+  - Text: Feeling lucky today?
+    DisplayMode: 1
+    CharactersPerSecond: 35
+    DisplayDuration: 1
+    DelayAfter: 0
+  - Text: Good. Because I have a feeling we're going to be great friends.
+    DisplayMode: 1
+    CharactersPerSecond: 35
+    DisplayDuration: 1
+    DelayAfter: 0
