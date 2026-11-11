@@ -1,4 +1,3 @@
-using System;
 using Random = UnityEngine.Random;
 
 public sealed class DialogueSystem

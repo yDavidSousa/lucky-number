@@ -16,6 +16,9 @@ public sealed class DialogueController
 
     private const float MinSilence = 0.6f;
 
+    public bool IsPlaying => _current != null;
+    public bool IsBusy => _current != null || _pending != null || _silenceTimer > 0f;
+
     public DialogueController(DialogueSystem dialogueSystem, DialogueView view)
     {
         _system = dialogueSystem;
