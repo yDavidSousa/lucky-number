@@ -92,7 +92,9 @@ public static class Game
     private static Dice[] _dices;
     private static DiceSettings _diceSettings;
     private static int _physicsStepsSinceRoll;
-    private static Transform[] _inventorySlots;
+
+    //Scene References
+    private static SpawnAreaReferences _playerLuckyCharmsArea;
 
     //Systems
     private static ScreenSystem _screenSystem;
@@ -116,19 +118,21 @@ public static class Game
         _state = new GameState {Stage = 1};
         _generator = new LuckyNumberGenerator();
 
-        StartupSceneReferences startupReferences = Object.FindAnyObjectByType<StartupSceneReferences>();
+        GameSceneReferences gameReferences = Object.FindAnyObjectByType<GameSceneReferences>();
 
-        _cameraController = new CameraController(startupReferences.WorldCamera);
+        _playerLuckyCharmsArea = gameReferences.PlayerLuckyCharmsArea;
+
+        _cameraController = new CameraController(gameReferences.WorldCamera);
         CameraController.SetDegreesOfFreedom(_cameraController, new CameraDOFData
         {
-            distance = startupReferences.CameraSettings.distance,
-            framing = startupReferences.CameraSettings.framing,
-            orthographicSize = startupReferences.CameraSettings.orthographicSize,
-            pitch = startupReferences.CameraSettings.pitch,
-            yaw = startupReferences.CameraSettings.yaw
+            distance = gameReferences.CameraSettings.distance,
+            framing = gameReferences.CameraSettings.framing,
+            orthographicSize = gameReferences.CameraSettings.orthographicSize,
+            pitch = gameReferences.CameraSettings.pitch,
+            yaw = gameReferences.CameraSettings.yaw
         });
 
-        _diceSettings = startupReferences.DiceSettings;
+        _diceSettings = gameReferences.DiceSettings;
         _dices = new Dice[2];
         for (int i = 0; i < _dices.Length; i++)
         {
@@ -139,10 +143,10 @@ public static class Game
 
         ScreenView[] screens = new ScreenView[(int)ScreenId.Count];
         {
-            screens[(int)ScreenId.HUD] = startupReferences.GameplayHUD.Screen;
-            screens[(int)ScreenId.GameOver] = startupReferences.GameOver.Screen;
-            screens[(int)ScreenId.Shop] = startupReferences.Shop.Screen;
-            screens[(int)ScreenId.Contracts] = startupReferences.Contract.Screen;   
+            screens[(int)ScreenId.HUD] = gameReferences.GameplayHUD.Screen;
+            screens[(int)ScreenId.GameOver] = gameReferences.GameOver.Screen;
+            screens[(int)ScreenId.Shop] = gameReferences.Shop.Screen;
+            screens[(int)ScreenId.Contracts] = gameReferences.Contract.Screen;   
         }
         _screenSystem = new ScreenSystem(screens);
         _shopSystem = new ShopSystem(GameData.LuckyCharmDefRegistry);
@@ -152,12 +156,11 @@ public static class Game
 
         yield return null;
 
-        _inventorySlots = startupReferences.InventorySlots;
-        _gameplayHUDController = new GameplayHUDController(startupReferences.GameplayHUD, () => _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Rolling)));
-        _shopController = new ShopController(_state, startupReferences.Shop, startupReferences.WorldCamera, startupReferences.ModifierReferences, LeaveShop, BuyModifier);
-        _contractController = new ContractController(_state, startupReferences.Contract, startupReferences.ContractReferences, SelectContract);
-        _gameOverController = new GameOverController(startupReferences.GameOver, Restart);
-        _dialogueController = new DialogueController(_dialogueSystem, startupReferences.Dialogue);
+        _gameplayHUDController = new GameplayHUDController(gameReferences.GameplayHUD, () => _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Rolling)));
+        _shopController = new ShopController(_state, gameReferences.Shop, gameReferences.WorldCamera, gameReferences.ShopLuckyCharmsArea, LeaveShop, BuyModifier);
+        _contractController = new ContractController(_state, gameReferences.Contract, gameReferences.ContractArea, SelectContract);
+        _gameOverController = new GameOverController(gameReferences.GameOver, Restart);
+        _dialogueController = new DialogueController(_dialogueSystem, gameReferences.Dialogue);
 
         _flowSystem = new GameFlowSystem(_screenSystem, _dialogueController, _state, true);
 
@@ -417,9 +420,9 @@ public static class Game
         {
             _shopController.Hydrate(_state);
 
-            LuckyCharmDefData luckyCharmData = _state.ShopOffers[offerIndex];
-            GameObject luckyCharmView = Object.Instantiate(luckyCharmData.viewPrefab, _inventorySlots[slot]);
-            luckyCharmView.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+            GameObject luckyCharmView = Object.Instantiate(_state.ShopOffers[offerIndex].viewPrefab, _playerLuckyCharmsArea.transform);
+            SpawnData spawnPose = SpawnUtility.GetPose(_playerLuckyCharmsArea, _state.EquippedModifiers.Length, offerIndex);
+            luckyCharmView.transform.SetLocalPositionAndRotation(spawnPose.position, spawnPose.rotation);
         }
     }
 
@@ -536,13 +539,11 @@ public static class Game
             dice.gameObject.SetActive(false);
         }
 
-        for (int i = 0; i < _inventorySlots.Length; i++)
+        int playerLuckyCharmsLength = _playerLuckyCharmsArea.transform.childCount;
+        for (int i = 0; i < playerLuckyCharmsLength; i++)
         {
-            for (int j = 0; j < _inventorySlots[i].childCount; j++)
-            {
-                Transform luckyCharmView = _inventorySlots[i].GetChild(j);
-                Object.Destroy(luckyCharmView.gameObject);
-            }
+            Transform luckyCharmView = _playerLuckyCharmsArea.transform.GetChild(i);
+            Object.Destroy(luckyCharmView.gameObject);
         }
 
         _flowSystem.Enqueue(FlowAction.Hide(GameOverView.Id));

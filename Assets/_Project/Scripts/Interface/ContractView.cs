@@ -19,15 +19,15 @@ public struct ContractEntry
 public sealed class ContractController
 {
     private readonly ContractView _view;
-    private readonly ContractReferences _contractReferences;
+    private readonly SpawnAreaReferences _contractArea;
 
     private readonly ContractEntry[] _entries;
 
     private readonly Action<int> _sealClicked;
 
-    public ContractController(GameState state, ContractView view, ContractReferences contractReferences, Action<int> sealClicked = null)
+    public ContractController(GameState state, ContractView view, SpawnAreaReferences contractArea, Action<int> sealClicked = null)
     {
-        _contractReferences = contractReferences;
+        _contractArea = contractArea;
         _sealClicked = sealClicked;
 
         _entries = new ContractEntry[state.ShopOffers.Length];
@@ -39,7 +39,9 @@ public sealed class ContractController
     {
         for (int i = 0; i < contracts.Length; i++)
         {
-            SelectableObjectView contractView = UnityEngine.Object.Instantiate(contracts[i].viewPrefab, _contractReferences.slots[i].transform).GetComponent<SelectableObjectView>();
+            SpawnData spawnPose = SpawnUtility.GetPose(_contractArea, contracts.Length, i);
+            GameObject luckyCharmView = UnityEngine.Object.Instantiate(contracts[i].viewPrefab, spawnPose.parent);
+            SelectableObjectView contractView = luckyCharmView.GetComponent<SelectableObjectView>();
             // Vector3 worldPosition = modifierItem.transform.position;
             // Vector2 screenPoint = _worldCamera.WorldToScreenPoint(worldPosition);
             // RectTransformUtility.ScreenPointToLocalPointInRectangle(

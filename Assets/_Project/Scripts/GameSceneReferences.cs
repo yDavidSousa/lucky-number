@@ -46,17 +46,23 @@ public enum ScreenId : byte
 }
 
 [ExecuteInEditMode]
-public class StartupSceneReferences : SceneReferences
+public class GameSceneReferences : SceneReferences
 {
     public Camera WorldCamera;
 
     [Space]
     public DiceSettings DiceSettings;
 
-    [Space]
-    public ModifierReferences ModifierReferences;
-    public ContractReferences ContractReferences;
-    public Transform[] InventorySlots;
+    [Header("Contract")]
+    public SpawnAreaReferences ContractArea;
+
+    [Header("Shop")]
+    public SpawnAreaReferences ShopLuckyCharmsArea;
+
+    [Header("HUD")]
+    public SpawnAreaReferences PlayerDiceRollsArea;
+    public SpawnAreaReferences PlayerCurrencyArea;
+    public SpawnAreaReferences PlayerLuckyCharmsArea;
 
     [Header("Interface")]
     public GameplayHUDView GameplayHUD;

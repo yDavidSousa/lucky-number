@@ -28,17 +28,17 @@ public sealed class ShopController
 {
     private readonly Camera _worldCamera;
     private readonly ShopView _view;
-    private readonly ModifierReferences _modifierReferences;
+    private readonly SpawnAreaReferences _luckyCharmsArea;
 
     private readonly ModifierEntry[] _entries;
 
     private readonly Action _leaveClicked;
     private readonly Action<int> _purchaseClicked;
 
-    public ShopController(GameState state, ShopView view, Camera worldCamera, ModifierReferences modifierReferences, Action leaveClicked = null, Action<int> purchaseClicked = null)
+    public ShopController(GameState state, ShopView view, Camera worldCamera, SpawnAreaReferences luckyCharmsArea, Action leaveClicked = null, Action<int> purchaseClicked = null)
     {
         _worldCamera = worldCamera;
-        _modifierReferences = modifierReferences;
+        _luckyCharmsArea = luckyCharmsArea;
 
         _entries = new ModifierEntry[state.ShopOffers.Length];
 
@@ -67,7 +67,9 @@ public sealed class ShopController
         var offers = state.ShopOffers;
         for (int i = 0; i < offers.Length; i++)
         {
-            SelectableObjectView modifierItem = Object.Instantiate(offers[i].viewPrefab, _modifierReferences.slots[i].transform).GetComponent<SelectableObjectView>();
+            SpawnData spawnPose = SpawnUtility.GetPose(_luckyCharmsArea, offers.Length, i);
+            GameObject luckyCharmView = Object.Instantiate(offers[i].viewPrefab, spawnPose.parent);
+            SelectableObjectView modifierItem = luckyCharmView.GetComponent<SelectableObjectView>();
             LuckyCharmInfoView modifierInfoView = Object.Instantiate(_view.LuckyCharmInfoViewPrefab, _view.gameObject.transform);
 
             Vector3 worldPosition = modifierItem.transform.position;
