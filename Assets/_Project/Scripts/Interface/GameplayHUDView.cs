@@ -12,7 +12,6 @@ public class GameplayHUDView : MonoBehaviour
     public LuckyNumberView LuckyNumberView;
     public TextMeshProUGUI TargetScoreText;
     public TextMeshProUGUI StageScoreText;
-    public TextMeshProUGUI RollCountText;
     public UIButtonView ThrowButton;
 }
 
@@ -48,7 +47,6 @@ public sealed class GameplayHUDController
     {
         _view.TargetScoreText.text = gameState.StageSettings.TargetScore.ToString();
         _view.StageScoreText.text = gameState.StageScore.ToString();
-        _view.RollCountText.text = $"{gameState.StageSettings.MaxRolls - gameState.RollsRemaining} / {gameState.StageSettings.MaxRolls}";
     }
 
     private void HandleThrowClicked(UIButtonView button)

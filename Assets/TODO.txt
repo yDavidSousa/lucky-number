@@ -1,10 +1,8 @@
 PRIORITY
-- Coins appear & disappear as reflection amount
 - Sell LuckyCharm
 - Error Effect 
 - Inspect LuckyCharm (Equipped)
+- Refactor SelectableObject
 
 - Refactor dice to be deterministic
-- HUD polish
-- Refactor SelectableObject
 - Sound Effects and Music

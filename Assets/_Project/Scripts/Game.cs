@@ -95,6 +95,10 @@ public static class Game
 
     //Scene References
     private static SpawnAreaReferences _playerLuckyCharmsArea;
+    private static GameObject _playerCurrencyViewPrefab;
+    private static SpawnAreaReferences _playerCurrencyArea;
+    private static GameObject _playerDiceRollsViewPrefab;
+    private static SpawnAreaReferences _playerDiceRollsArea;
 
     //Systems
     private static ScreenSystem _screenSystem;
@@ -121,6 +125,10 @@ public static class Game
         GameSceneReferences gameReferences = Object.FindAnyObjectByType<GameSceneReferences>();
 
         _playerLuckyCharmsArea = gameReferences.PlayerLuckyCharmsArea;
+        _playerDiceRollsViewPrefab = gameReferences.PlayerDiceRollsViewPrefab;
+        _playerDiceRollsArea = gameReferences.PlayerDiceRollsArea;
+        _playerCurrencyViewPrefab = gameReferences.PlayerCurrencyViewPrefab;
+        _playerCurrencyArea = gameReferences.PlayerCurrencyArea;
 
         _cameraController = new CameraController(gameReferences.WorldCamera);
         CameraController.SetDegreesOfFreedom(_cameraController, new CameraDOFData
@@ -162,7 +170,7 @@ public static class Game
         _gameOverController = new GameOverController(gameReferences.GameOver, Restart);
         _dialogueController = new DialogueController(_dialogueSystem, gameReferences.Dialogue);
 
-        _flowSystem = new GameFlowSystem(_screenSystem, _dialogueController, _state, true);
+        _flowSystem = new GameFlowSystem(_screenSystem, _dialogueController, _state, false);
 
         yield return null;
 
@@ -279,6 +287,12 @@ public static class Game
 
         _gameplayHUDController.Hydrate(_state);
         _state.LuckyNumber = _generator.Generate(difficulty: 0.5f, lossStreak: _state.LossStreak);
+        for (int i = 0; i < _state.StageSettings.MaxRolls; i++)
+        {
+            SpawnData spawnPose = SpawnUtility.GetPose(_playerDiceRollsArea, _state.StageSettings.MaxRolls, i);
+            GameObject diceRollsView = Object.Instantiate(_playerDiceRollsViewPrefab, spawnPose.position, spawnPose.rotation);
+            diceRollsView.transform.SetParent(spawnPose.parent);
+        }
         _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.LuckyNumberRevealed));
         _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Preparation));
     }
@@ -294,6 +308,10 @@ public static class Game
             }
             case GamePhase.Rolling:
             {
+                int childCount = _playerDiceRollsArea.transform.childCount;
+                Transform child = _playerDiceRollsArea.transform.GetChild(Random.Range(0, childCount));
+                Object.Destroy(child.gameObject);
+
                 _state.RollsRemaining--;
                 RollDices();
                 _gameplayHUDController.Hydrate(_state);
@@ -371,13 +389,40 @@ public static class Game
         const int baseReward = 5;
         const int bonusPerRemainingRoll = 2;
 
-        _state.Currency += baseReward + _state.RollsRemaining * bonusPerRemainingRoll;
+        int childCount = _playerDiceRollsArea.transform.childCount;
+        for (int i = 0; i < childCount; i++)
+        {
+            Transform child = _playerDiceRollsArea.transform.GetChild(i);
+            Object.Destroy(child.gameObject);
+        }
+
+        int currencyReward = baseReward + _state.RollsRemaining * bonusPerRemainingRoll;
 
         if (StageProgression.IsActComplete(_state.Stage))
         {
-            _state.Currency += _state.ActiveContract.reward;
+            currencyReward += _state.ActiveContract.reward;
             _state.ActiveContract = default;
         }
+
+        for (int i = 0; i < currencyReward; i++)
+        {
+            Transform[] points = _playerCurrencyArea.Points;
+
+            int minCount = int.MaxValue;
+
+            for (int j = 0; j < points.Length; j++)
+                minCount = Mathf.Min(minCount, points[j].childCount);
+
+            int selectedIndex = Random.Range(0, points.Length);
+
+            while (points[selectedIndex].childCount > minCount)
+                selectedIndex = Random.Range(0, points.Length);
+
+            SpawnData pose = SpawnUtility.GetPose(_playerCurrencyArea, points.Length, selectedIndex);
+            Vector3 position = pose.position + Vector3.up * (pose.parent.childCount * 0.05f);
+            GameObject currencyView = Object.Instantiate(_playerCurrencyViewPrefab, position, pose.rotation, pose.parent);
+        }
+        _state.Currency += currencyReward;
 
         _shopSystem.GenerateOffers(_state.ShopOffers, ref _state.ShopPurchased);
 
@@ -415,10 +460,40 @@ public static class Game
 
     private static void BuyModifier(int offerIndex)
     {
+        int playerCurrency = _state.Currency;
         bool success = _shopSystem.TryBuy(_state, offerIndex, out int slot);
         if (success)
         {
             _shopController.Hydrate(_state);
+
+            int spentCurrency = playerCurrency - _state.Currency;
+            Transform[] points = _playerCurrencyArea.Points;
+
+            for (int i = 0; i < spentCurrency; i++)
+            {
+                int totalCoins = 0;
+
+                for (int j = 0; j < points.Length; j++)
+                    totalCoins += points[j].childCount;
+
+                if (totalCoins == 0)
+                    break;
+
+                int randomIndex = Random.Range(0, totalCoins);
+                for (int j = 0; j < points.Length; j++)
+                {
+                    int childCount = points[j].childCount;
+                    if (randomIndex < childCount)
+                    {
+                        Transform coin = points[j].GetChild(childCount - 1);
+                        coin.SetParent(null);
+                        Object.Destroy(coin.gameObject);
+                        break;
+                    }
+
+                    randomIndex -= childCount;
+                }
+            }
 
             GameObject luckyCharmView = Object.Instantiate(_state.ShopOffers[offerIndex].viewPrefab, _playerLuckyCharmsArea.transform);
             SpawnData spawnPose = SpawnUtility.GetPose(_playerLuckyCharmsArea, _state.EquippedModifiers.Length, offerIndex);
@@ -544,6 +619,16 @@ public static class Game
         {
             Transform luckyCharmView = _playerLuckyCharmsArea.transform.GetChild(i);
             Object.Destroy(luckyCharmView.gameObject);
+        }
+
+        for (int i = 0; i < _playerCurrencyArea.Points.Length; i++)
+        {
+            var childCount = _playerCurrencyArea.Points[i].childCount;
+            for (int j = 0; j < childCount; j++)
+            {
+                Transform luckyCharmView = _playerCurrencyArea.Points[i].GetChild(j);
+                Object.Destroy(luckyCharmView.gameObject);
+            }
         }
 
         _flowSystem.Enqueue(FlowAction.Hide(GameOverView.Id));

@@ -48,10 +48,9 @@ public enum ScreenId : byte
 [ExecuteInEditMode]
 public class GameSceneReferences : SceneReferences
 {
+    [Header("Camera")]
     public Camera WorldCamera;
-
-    [Space]
-    public DiceSettings DiceSettings;
+    public SceneCameraSettings CameraSettings;
 
     [Header("Contract")]
     public SpawnAreaReferences ContractArea;
@@ -60,9 +59,13 @@ public class GameSceneReferences : SceneReferences
     public SpawnAreaReferences ShopLuckyCharmsArea;
 
     [Header("HUD")]
+    public GameObject PlayerDiceRollsViewPrefab;
     public SpawnAreaReferences PlayerDiceRollsArea;
+
+    public GameObject PlayerCurrencyViewPrefab;
     public SpawnAreaReferences PlayerCurrencyArea;
     public SpawnAreaReferences PlayerLuckyCharmsArea;
+    public SpawnAreaReferences PlayerContractArea;
 
     [Header("Interface")]
     public GameplayHUDView GameplayHUD;
@@ -71,8 +74,8 @@ public class GameSceneReferences : SceneReferences
     public GameOverView GameOver;
     public DialogueView Dialogue;
 
-    [Header("Debug")]
-    public SceneCameraSettings CameraSettings;
+    [Space]
+    public DiceSettings DiceSettings;
 
 #if UNITY_EDITOR
     private CameraController _camera;

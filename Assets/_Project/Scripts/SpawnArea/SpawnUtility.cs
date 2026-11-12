@@ -25,7 +25,17 @@ public static class SpawnUtility
             SpawnMode.FixedPoints => GetFixedPosition(area.Points, index),
             _ => area.transform.position
         };
-        Quaternion rotation = randomRotation ? Random.rotationUniform : Quaternion.identity;
+        Quaternion rotation;
+        if (randomRotation)
+        {
+            Vector3 euler = Random.rotationUniform.eulerAngles;
+            rotation = Quaternion.Euler(0f, euler.y, 0f);
+        }
+        else
+        {
+            rotation = Quaternion.identity;
+        }
+
         Transform parent = area.Mode switch
         {
             SpawnMode.FixedPoints => GetFixedTransform(area.Points, index),
