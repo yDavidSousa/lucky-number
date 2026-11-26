@@ -9,8 +9,10 @@ public struct DiceResult
 {
     public int DieA;
     public int DieB;
+
     public int BaseScore;
     public int FinalScore;
+
     public LuckyMatchType MatchType;
 }
 
@@ -21,8 +23,8 @@ public enum GamePhase : byte
     Rolling,
     Modifying,
     Result,
-    ContractSelection,
     Shop,
+    ContractSelection,
     Boss,
     GameOver
 }
@@ -32,27 +34,32 @@ public sealed class GameState
     public GamePhase Phase;
     public GamePhase? PendingPhase;
 
+    //Progression
     public int Stage;
     public int StageScore;
+    public int TargetScore;
+    public int MaxRolls;
     public int RollsRemaining;
-
-    public int LuckyNumber;
+    public int TotalScore;
     public int Currency;
-    
+
+    //Lucky Number
+    public int LuckyNumber;
     public int LossStreak;
 
-    public StageSettings StageSettings;
-    public int BossHealth;
+    //Dice
+    public DiceWeights DieAWeights = DiceWeights.Fair;
+    public DiceWeights DieBWeights = DiceWeights.Fair;
+    public DiceResult DiceResult;
 
+    //Contracts
     public ContractDefData ActiveContract; // change to id
     public ContractDefData[] ContractOffers = new ContractDefData[2];  // change to id
 
-    public const int MaxModifiers = 3;
-    public ModifierType[] EquippedModifiers = new ModifierType[MaxModifiers];  // change to id
+    //Lucky Charms
+    public ModifierType[] EquippedModifiers = new ModifierType[3];  // change to id
     public LuckyCharmDefData[] ShopOffers = new LuckyCharmDefData[3];  // change to id
     public bool[] ShopPurchased = new bool[3];
-
-    public DiceResult DiceResult;
 
     public void Reset()
     {
@@ -61,24 +68,25 @@ public sealed class GameState
 
         Stage = 0;
         StageScore = 0;
+        TargetScore = 0;
+        Currency = 0;
+        TotalScore = 0;
+        MaxRolls = 0;
         RollsRemaining = 0;
 
         LuckyNumber = 0;
-        Currency = 0;
-
         LossStreak = 0;
 
-        StageSettings = default;
-        BossHealth = 0;
+        DieAWeights = DiceWeights.Fair;
+        DieBWeights = DiceWeights.Fair;
+        DiceResult = new DiceResult();
 
         ActiveContract = default;
         ContractOffers = new ContractDefData[2];
 
-        EquippedModifiers = new ModifierType[MaxModifiers];
+        EquippedModifiers = new ModifierType[3];
         ShopOffers = new LuckyCharmDefData[3];
         ShopPurchased = new bool[3];
-
-        DiceResult = new DiceResult();
     }
 }
 
@@ -89,9 +97,8 @@ public static class Game
     private static bool _initialized;
 
     private static CameraController _cameraController;
-    private static Dice[] _dices;
+    private static DieView[] _dices;
     private static DiceSettings _diceSettings;
-    private static int _physicsStepsSinceRoll;
 
     //Scene References
     private static SpawnAreaReferences _playerLuckyCharmsArea;
@@ -103,6 +110,7 @@ public static class Game
     //Systems
     private static ScreenSystem _screenSystem;
     private static GameFlowSystem _flowSystem;
+
     private static ShopSystem _shopSystem;
     private static LuckyCharmSystem _luckyCharmSystem;
     private static ContractSystem _contractSystem;
@@ -123,6 +131,8 @@ public static class Game
         _generator = new LuckyNumberGenerator();
 
         GameSceneReferences gameReferences = Object.FindAnyObjectByType<GameSceneReferences>();
+        _state.DieAWeights = gameReferences.DiceSettings.DefaultWeights;
+        _state.DieBWeights = gameReferences.DiceSettings.DefaultWeights;
 
         _playerLuckyCharmsArea = gameReferences.PlayerLuckyCharmsArea;
         _playerDiceRollsViewPrefab = gameReferences.PlayerDiceRollsViewPrefab;
@@ -141,12 +151,12 @@ public static class Game
         });
 
         _diceSettings = gameReferences.DiceSettings;
-        _dices = new Dice[2];
+        _dices = new DieView[2];
         for (int i = 0; i < _dices.Length; i++)
         {
-            Dice dice = Object.Instantiate(_diceSettings.Prefab, _diceSettings.SpawnPoint.localPosition, Quaternion.identity);
-            dice.gameObject.SetActive(false);
-            _dices[i] = dice;
+            DieView dieView = Object.Instantiate(_diceSettings.Prefab, _diceSettings.SpawnPoint.localPosition, Quaternion.identity);
+            dieView.gameObject.SetActive(false);
+            _dices[i] = dieView;
         }
 
         ScreenView[] screens = new ScreenView[(int)ScreenId.Count];
@@ -192,9 +202,6 @@ public static class Game
     private static void FixedUpdate(float deltaTime)
     {
         if (!_initialized) return;
-
-        if (_state.Phase == GamePhase.Rolling)
-            _physicsStepsSinceRoll++;
     }
 
     private static void Update(float deltaTime)
@@ -213,41 +220,26 @@ public static class Game
             return;
         }
 
-        switch (_state.Phase)
+        if (_state.Phase == GamePhase.Rolling)
         {
-            case GamePhase.Rolling:
+            if (_dices[0].IsFinished && _dices[1].IsFinished)
             {
-                if (_physicsStepsSinceRoll < 2)
-                    return;
-
-                bool allStopped = true;
-                foreach (Dice dice in _dices)
-                {
-                    if (!dice.IsStopped)
-                    {
-                        allStopped = false;
-                        break;
-                    }
-                }
-
-                if (allStopped)
-                {
-                    _state.DiceResult = new DiceResult()
-                    {
-                        DieA = _dices[0].GetValue(),
-                        DieB = _dices[1].GetValue(),
-                        BaseScore = 100
-                    };
-                    _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Result));
-                }
-                break;
+                _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Modifying));
             }
         }
     }
 
     private static void LateUpdate(float deltaTime)
     {
-        if (!_initialized) return;
+        if (!_initialized)
+        {
+            return;
+        }
+
+        if (_state.Phase == GamePhase.Rolling)
+        {
+            DiceCollisionSystem.Resolve(_dices[0], _dices[1]);
+        }
 
         // User Interface (UI)
         {
@@ -282,14 +274,15 @@ public static class Game
         settings.MaxRolls = maxRolls;
 
         _state.StageScore = 0;
-        _state.StageSettings = settings;
+        _state.TargetScore = settings.TargetScore;
+        _state.MaxRolls = settings.MaxRolls;
         _state.RollsRemaining = settings.MaxRolls;
 
         _gameplayHUDController.Hydrate(_state);
         _state.LuckyNumber = _generator.Generate(difficulty: 0.5f, lossStreak: _state.LossStreak);
-        for (int i = 0; i < _state.StageSettings.MaxRolls; i++)
+        for (int i = 0; i < _state.MaxRolls; i++)
         {
-            SpawnData spawnPose = SpawnUtility.GetPose(_playerDiceRollsArea, _state.StageSettings.MaxRolls, i);
+            SpawnData spawnPose = SpawnUtility.GetPose(_playerDiceRollsArea, _state.MaxRolls, i);
             GameObject diceRollsView = Object.Instantiate(_playerDiceRollsViewPrefab, spawnPose.position, spawnPose.rotation);
             diceRollsView.transform.SetParent(spawnPose.parent);
         }
@@ -303,18 +296,30 @@ public static class Game
         {
             case GamePhase.Preparation:
             {
+                for (int i = 0; i < _dices.Length; i++)
+                {
+                    DieView dieView = _dices[i];
+                    dieView.gameObject.SetActive(false);
+                }
+
                 _gameplayHUDController.SpinLuckyNumber(_state.LuckyNumber);
                 break;
             }
             case GamePhase.Rolling:
             {
+                _state.RollsRemaining--;
+
                 int childCount = _playerDiceRollsArea.transform.childCount;
                 Transform child = _playerDiceRollsArea.transform.GetChild(Random.Range(0, childCount));
                 Object.Destroy(child.gameObject);
-
-                _state.RollsRemaining--;
+                
                 RollDices();
                 _gameplayHUDController.Hydrate(_state);
+                break;
+            }
+            case GamePhase.Modifying:
+            {
+                ProcessModifiers();
                 break;
             }
             case GamePhase.Result:
@@ -327,13 +332,6 @@ public static class Game
             case GamePhase.Shop:
             {
                 _flowSystem.Enqueue(FlowAction.Speak(DialogueTrigger.ShopOpened));
-
-                for (int i = 0; i < _dices.Length; i++)
-                {
-                    Dice dice = _dices[i];
-                    dice.gameObject.SetActive(false);
-                }
-
                 _shopController.SetOffers(_state);
                 break;
             }
@@ -343,8 +341,8 @@ public static class Game
 
                 for (int i = 0; i < _dices.Length; i++)
                 {
-                    Dice dice = _dices[i];
-                    dice.gameObject.SetActive(false);
+                    DieView dieView = _dices[i];
+                    dieView.gameObject.SetActive(false);
                 }
 
                 _contractController.SetContracts(_state.ContractOffers);
@@ -368,7 +366,7 @@ public static class Game
 
         _state.StageScore = Mathf.Max(0, _state.StageScore + score);
 
-        if (_state.StageScore >= _state.StageSettings.TargetScore)
+        if (_state.StageScore >= _state.TargetScore)
         {
             CompleteStage();
         }
@@ -522,31 +520,78 @@ public static class Game
 
     private static void RollDices()
     {
-        _physicsStepsSinceRoll = 0;
-        float offset = Random.Range(0.5f, 1.0f);
-        Vector3[] spawnPoint = {
-            _diceSettings.SpawnPoint.position - (_diceSettings.SpawnPoint.right * offset), 
-            _diceSettings.SpawnPoint.position + (_diceSettings.SpawnPoint.right * offset)
+        DiceRollSystem.RollPair(_state.DieAWeights, _state.DieBWeights, out int dieA, out int dieB);
+        _state.DiceResult = new DiceResult
+        {
+            DieA = dieA,
+            DieB = dieB,
+            BaseScore = 100
         };
+
+        Vector3 landingA = DiceSpawnSystem.GetLandingPosition(
+            _diceSettings.LandingCenter,
+            _diceSettings.LandingRangeX,
+            _diceSettings.LandingRangeZ
+        );
+
+        Vector3 landingB = DiceSpawnSystem.GetSeparatedLandingPosition(
+            _diceSettings.LandingCenter,
+            _diceSettings.LandingRangeX,
+            _diceSettings.LandingRangeZ,
+            _diceSettings.MinDiceDistance,
+            landingA
+        );
+
+        Vector3[] landings =
+        {
+            landingA,
+            landingB
+        };
+
+        int[] results =
+        {
+            dieA,
+            dieB
+        };
+        
+        Transform area = _diceSettings.DiceArea;
+        float tableHeight = _diceSettings.DiceArea.position.y;
         for (int i = 0; i < _dices.Length; i++)
         {
-            Dice dice = _dices[i];
-            Vector3 position = spawnPoint[i];
-            float force = Random.Range(_diceSettings.ThrowForce.x, _diceSettings.ThrowForce.y);
-            float torque = Random.Range(_diceSettings.ThrowTorque.x, _diceSettings.ThrowTorque.y);
+            DieView dieView = _dices[i];
 
-            dice.transform.SetPositionAndRotation(position, _diceSettings.SpawnPoint.rotation);
-            dice.gameObject.SetActive(true);
-            dice.Throw(_diceSettings.SpawnPoint.localPosition, _diceSettings.SpawnPoint.forward, force, torque);
+            Vector3 startPosition =
+                area.TransformPoint(
+                    _diceSettings.SpawnPoint.position +
+                    new Vector3(
+                        i == 0 ? -0.3f : 0.3f,
+                        0f,
+                        0f
+                    )
+                );
+
+            Vector3 endPosition =
+                area.TransformPoint(
+                    landings[i]
+                );
+
+            dieView.gameObject.SetActive(true);
+
+            dieView.Throw(
+                results[i],
+                startPosition,
+                endPosition,
+                tableHeight
+            );
         }
     }
 
-    private static int EvaluateResult()
+    private static void ProcessModifiers()
     {
-        DiceResult diceResult = _state.DiceResult;
+        DiceResult result = _state.DiceResult;
 
-        int dieA = diceResult.DieA;
-        int dieB = diceResult.DieB;
+        int dieA = result.DieA;
+        int dieB = result.DieB;
 
         _luckyCharmSystem.ApplyDiceModifiers(
             _state.EquippedModifiers,
@@ -555,11 +600,22 @@ public static class Game
             ref dieB
         );
 
+        result.DieA = dieA;
+        result.DieB = dieB;
+
+        _state.DiceResult = result;
+        _flowSystem.Enqueue(FlowAction.SetPhase(GamePhase.Result));
+    }
+
+    private static int EvaluateResult()
+    {
+        DiceResult result = _state.DiceResult;
+
         LuckyResult luckyResult = LuckyNumberEvaluator.Evaluate(
             _state.LuckyNumber,
-            diceResult.DieA,
-            diceResult.DieB,
-            diceResult.BaseScore
+            result.DieA,
+            result.DieB,
+            result.BaseScore
         );
 
         int finalScore = _luckyCharmSystem.ApplyScoreModifiers(
@@ -569,10 +625,10 @@ public static class Game
             _state.RollsRemaining
         );
 
-        diceResult.FinalScore = finalScore;
-        diceResult.MatchType = luckyResult.MatchType;
+        result.FinalScore = finalScore;
+        result.MatchType = luckyResult.MatchType;
 
-        _state.DiceResult = diceResult;
+        _state.DiceResult = result;
 
         if (luckyResult.MatchType == LuckyMatchType.None)
             _state.LossStreak++;
@@ -592,9 +648,9 @@ public static class Game
 
         Debug.Log(
             $"Lucky: {_state.LuckyNumber} | " +
-            $"Dados: {diceResult.DieA}, {diceResult.DieB} | " +
-            $"Acerto: {diceResult.MatchType} | " +
-            $"Pontos: {diceResult.FinalScore}"
+            $"Dados: {result.DieA}, {result.DieB} | " +
+            $"Acerto: {result.MatchType} | " +
+            $"Pontos: {result.FinalScore}"
         );
         return finalScore;
     }
@@ -610,8 +666,8 @@ public static class Game
 
         for (int i = 0; i < _dices.Length; i++)
         {
-            Dice dice = _dices[i];
-            dice.gameObject.SetActive(false);
+            DieView dieView = _dices[i];
+            dieView.gameObject.SetActive(false);
         }
 
         int playerLuckyCharmsLength = _playerLuckyCharmsArea.transform.childCount;

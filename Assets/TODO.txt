@@ -1,8 +1,9 @@
 PRIORITY
+- Refactor SelectableObject
 - Sell LuckyCharm
 - Error Effect 
 - Inspect LuckyCharm (Equipped)
-- Refactor SelectableObject
+- Boss Fight
+- Tutorial
 
-- Refactor dice to be deterministic
 - Sound Effects and Music

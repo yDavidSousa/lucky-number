@@ -18,10 +18,19 @@ public struct SceneCameraSettings
 [System.Serializable]
 public class DiceSettings
 {
-    public Dice Prefab;
+    public DieView Prefab;
     public Transform SpawnPoint;
-    public Vector2 ThrowForce;
-    public Vector2 ThrowTorque;
+    public Transform DiceArea;
+    
+    public float MinDiceDistance = 1.2f;
+
+    [Header("Landing")]
+    public Vector3 LandingCenter = Vector3.zero;
+    public Vector2 LandingRangeX = new(-1f, 1f);
+    public Vector2 LandingRangeZ = new(-0.5f, 0.5f);
+    
+    [Header("Dice")]
+    public DiceWeights DefaultWeights = DiceWeights.Fair;
 }
 
 [System.Serializable]

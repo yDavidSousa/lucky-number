@@ -45,7 +45,7 @@ public sealed class GameplayHUDController
 
     public void Hydrate(GameState gameState)
     {
-        _view.TargetScoreText.text = gameState.StageSettings.TargetScore.ToString();
+        _view.TargetScoreText.text = gameState.TargetScore.ToString();
         _view.StageScoreText.text = gameState.StageScore.ToString();
     }
 
